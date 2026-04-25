@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 20px; }
+        .container { background-color: #ffffff; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 20px; }
+        h1 { color: #4f46e5; margin: 0; }
+        .status-box { background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #4f46e5; }
+        .footer { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>eSchoolKart</h1>
+            <h2>Return Request Update</h2>
+        </div>
+        <p>Hi {{ parent_name }},</p>
+        <p>There is an update regarding your {{ request_type }} request for Order <strong>{{ order_number }}</strong>.</p>
+        
+        <div class="status-box">
+            <p><strong>Current Status:</strong> <span style="text-transform: uppercase; font-weight: bold;">{{ status }}</span></p>
+            {% if admin_notes %}
+            <p><strong>Note from Vendor:</strong><br/>{{ admin_notes }}</p>
+            {% endif %}
+        </div>
+
+        <p>You can view the full details of this request in your returns dashboard.</p>
+        
+        <div class="footer">
+            <p>eSchoolKart Distribution System</p>
+        </div>
+    </div>
+</body>
+</html>

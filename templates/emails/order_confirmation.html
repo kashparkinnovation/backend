@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 20px; }
+        .container { background-color: #ffffff; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 20px; }
+        h1 { color: #4f46e5; margin: 0; }
+        .order-details { background-color: #f1f5f9; padding: 15px; border-radius: 6px; margin: 20px 0; }
+        .footer { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>eSchoolKart</h1>
+            <h2>Order Confirmed!</h2>
+        </div>
+        <p>Hi {{ parent_name }},</p>
+        <p>Great news! Your uniform order for <strong>{{ student_name }}</strong> has been placed successfully.</p>
+        
+        <div class="order-details">
+            <p><strong>Order Number:</strong> {{ order.order_number }}</p>
+            <p><strong>Total Amount:</strong> ₹{{ order.total_amount }}</p>
+            <p><strong>School:</strong> {{ school_name }}</p>
+        </div>
+
+        <p>The uniforms will be delivered to the school wrapped and ready for collection shortly. You can track the status of this order at any time in your dashboard.</p>
+        <p>Thank you for shopping with us!</p>
+        
+        <div class="footer">
+            <p>eSchoolKart Distribution System<br>An intelligent approach to school logistics.</p>
+        </div>
+    </div>
+</body>
+</html>
