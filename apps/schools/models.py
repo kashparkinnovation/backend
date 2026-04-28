@@ -10,7 +10,7 @@ class SchoolApprovalStatus(models.TextChoices):
 
 
 class School(models.Model):
-    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name='schools')
+    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name='schools', null=True, blank=True)
     # Optional dedicated school-staff account (role=school) that logs into the School Portal
     school_user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
@@ -57,3 +57,29 @@ class School(models.Model):
     @property
     def is_rejected(self):
         return self.approval_status == SchoolApprovalStatus.REJECTED
+
+
+class VendorChangeRequestStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending Approval'
+    APPROVED = 'approved', 'Approved'
+    REJECTED = 'rejected', 'Rejected'
+
+
+class VendorChangeRequest(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='vendor_change_requests')
+    old_vendor = models.ForeignKey(Vendor, on_delete=models.SET_NULL, null=True, blank=True, related_name='old_vendor_requests')
+    new_vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name='new_vendor_requests')
+    status = models.CharField(
+        max_length=20,
+        choices=VendorChangeRequestStatus.choices,
+        default=VendorChangeRequestStatus.PENDING,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'vendor_change_requests'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Change Vendor for {self.school.name} to {self.new_vendor.business_name} ({self.status})'

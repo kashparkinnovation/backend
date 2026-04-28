@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, TokenResponseSerializer
+from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, TokenResponseSerializer, OTPLoginSerializer, OTPSignupSerializer, OTPForgotPasswordSerializer
 from .models import CustomUser
 
 
@@ -132,3 +132,45 @@ class AdminDelegateAccessView(APIView):
         user = get_object_or_404(CustomUser, id=target_user_id)
         tokens = TokenResponseSerializer.get_tokens_for_user(user)
         return Response(tokens, status=status.HTTP_200_OK)
+
+
+class OTPLoginView(APIView):
+    """POST /api/v1/auth/otp/login/ — Login with Firebase Phone OTP token."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = OTPLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        tokens = TokenResponseSerializer.get_tokens_for_user(user)
+        return Response(tokens, status=status.HTTP_200_OK)
+
+
+class OTPSignupView(generics.CreateAPIView):
+    """POST /api/v1/auth/otp/register/ — Register with Firebase Phone OTP token."""
+    serializer_class = OTPSignupSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        tokens = TokenResponseSerializer.get_tokens_for_user(user)
+        return Response(tokens, status=status.HTTP_201_CREATED)
+
+
+class OTPForgotPasswordView(APIView):
+    """POST /api/v1/auth/otp/forgot-password/ — Reset password using Firebase OTP verification."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = OTPForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        
+        # Reset password
+        password = serializer.validated_data['password']
+        user.set_password(password)
+        user.save()
+        
+        return Response({'detail': 'Password reset successfully.'}, status=status.HTTP_200_OK)

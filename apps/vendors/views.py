@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.db.models import Sum, Count, Q
 from datetime import timedelta
 from .models import Vendor
-from .serializers import VendorSerializer, VendorApprovalSerializer
+from .serializers import VendorSerializer, VendorApprovalSerializer, AdminVendorCreateSerializer
 from apps.users.permissions import IsAdmin, IsVendor
 
 
@@ -110,6 +110,21 @@ class VendorDashboardView(APIView):
 
 
 # ─── Admin-facing vendor management ──────────────────────────────────────────
+
+class AdminVendorCreateView(generics.CreateAPIView):
+    """
+    POST /api/v1/admin/vendors/create/
+    Admin manually registers a vendor and links them to a target school.
+    """
+    serializer_class = AdminVendorCreateSerializer
+    permission_classes = [IsAdmin]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vendor = serializer.save()
+        return Response(VendorSerializer(vendor).data, status=status.HTTP_201_CREATED)
+
 
 class AdminVendorListView(generics.ListAPIView):
     """GET /api/v1/admin/vendors/ — Admin lists all vendors."""
