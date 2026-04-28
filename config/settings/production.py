@@ -7,7 +7,13 @@ from decouple import config
 
 DEBUG = False
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    'eschoolkart.com',
+    'www.eschoolkart.com',
+    'backend.eschoolkart.com',   # Django API server hostname
+]
 
 # ─── Security ────────────────────────────────────────────────────────────────
 SECURE_BROWSER_XSS_FILTER = True
@@ -16,6 +22,12 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+
+# ─── CORS (production overrides) ─────────────────────────────────────────────
+CORS_ALLOWED_ORIGINS = [
+    'https://eschoolkart.com',
+    'https://www.eschoolkart.com',
+]
 
 # ─── Static files ─────────────────────────────────────────────────────────────
 STATIC_URL = '/static/'

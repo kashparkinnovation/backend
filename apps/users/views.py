@@ -3,7 +3,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, TokenResponseSerializer, OTPLoginSerializer, OTPSignupSerializer, OTPForgotPasswordSerializer
+from .serializers import (
+    RegisterSerializer, LoginSerializer, UserSerializer, TokenResponseSerializer,
+    OTPLoginSerializer, OTPSignupSerializer, OTPForgotPasswordSerializer,
+    EmailOTPLoginSerializer, EmailOTPSignupSerializer, EmailOTPForgotPasswordSerializer,
+)
 from .models import CustomUser
 
 
@@ -173,4 +177,44 @@ class OTPForgotPasswordView(APIView):
         user.set_password(password)
         user.save()
         
+        return Response({'detail': 'Password reset successfully.'}, status=status.HTTP_200_OK)
+
+
+# ─── Email magic-link OTP views ──────────────────────────────────────────
+
+class EmailOTPLoginView(APIView):
+    """POST /api/v1/auth/otp/email-login/ — Login via Firebase email sign-in link."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = EmailOTPLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        tokens = TokenResponseSerializer.get_tokens_for_user(user)
+        return Response(tokens, status=status.HTTP_200_OK)
+
+
+class EmailOTPSignupView(generics.CreateAPIView):
+    """POST /api/v1/auth/otp/email-register/ — Register via Firebase email sign-in link."""
+    serializer_class = EmailOTPSignupSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        tokens = TokenResponseSerializer.get_tokens_for_user(user)
+        return Response(tokens, status=status.HTTP_201_CREATED)
+
+
+class EmailOTPForgotPasswordView(APIView):
+    """POST /api/v1/auth/otp/email-forgot-password/ — Reset password via email sign-in link."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = EmailOTPForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        user.set_password(serializer.validated_data['password'])
+        user.save()
         return Response({'detail': 'Password reset successfully.'}, status=status.HTTP_200_OK)

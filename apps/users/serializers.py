@@ -175,3 +175,83 @@ class ContactLeadSerializer(serializers.ModelSerializer):
         model = ContactLead
         fields = '__all__'
         read_only_fields = ['id', 'created_at']
+
+
+# ─── Email magic-link OTP serializers ────────────────────────────────────────
+
+class EmailOTPLoginSerializer(serializers.Serializer):
+    """Login via Firebase email sign-in link — looks up user by email in the token."""
+    id_token = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        try:
+            decoded = verify_firebase_token(attrs['id_token'])
+            email = decoded.get('email')
+            if not email:
+                raise serializers.ValidationError('No email found in Firebase token.')
+            user = CustomUser.objects.filter(email=email).first()
+            if not user:
+                raise serializers.ValidationError(
+                    'No account found for this email. Please sign up first.'
+                )
+            if not user.is_active:
+                raise serializers.ValidationError('Account is disabled.')
+            attrs['user'] = user
+            return attrs
+        except ValueError as e:
+            raise serializers.ValidationError(str(e))
+
+
+class EmailOTPSignupSerializer(serializers.ModelSerializer):
+    """Register via Firebase email sign-in link — email comes from the verified token."""
+    id_token   = serializers.CharField(write_only=True)
+    role = serializers.ChoiceField(
+        choices=[UserRole.STUDENT], default=UserRole.STUDENT
+    )
+
+    class Meta:
+        model  = CustomUser
+        fields = ('id_token', 'first_name', 'last_name', 'role')
+
+    def validate(self, attrs):
+        try:
+            decoded = verify_firebase_token(attrs['id_token'])
+            email = decoded.get('email')
+            if not email:
+                raise serializers.ValidationError('No email found in Firebase token.')
+            if CustomUser.objects.filter(email=email).exists():
+                raise serializers.ValidationError(
+                    {'email': 'An account with this email already exists. Please log in.'}
+                )
+            attrs['email'] = email
+            return attrs
+        except ValueError as e:
+            raise serializers.ValidationError(str(e))
+
+    def create(self, validated_data):
+        validated_data.pop('id_token')
+        password = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+        return CustomUser.objects.create_user(password=password, **validated_data)
+
+
+class EmailOTPForgotPasswordSerializer(serializers.Serializer):
+    """Reset password after verifying via Firebase email sign-in link."""
+    id_token  = serializers.CharField(write_only=True)
+    password  = serializers.CharField(write_only=True, validators=[validate_password])
+    password2 = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({'password': 'Passwords do not match.'})
+        try:
+            decoded = verify_firebase_token(attrs['id_token'])
+            email = decoded.get('email')
+            if not email:
+                raise serializers.ValidationError('No email found in Firebase token.')
+            user = CustomUser.objects.filter(email=email).first()
+            if not user:
+                raise serializers.ValidationError('No account found for this email.')
+            attrs['user'] = user
+            return attrs
+        except ValueError as e:
+            raise serializers.ValidationError(str(e))
