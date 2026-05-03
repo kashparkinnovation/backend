@@ -44,15 +44,22 @@ class ReturnRequestActionSerializer(serializers.Serializer):
 # ─── Student creates a return request ─────────────────────────────────────────
 
 class ReturnRequestCreateView(APIView):
-    """POST /api/v1/orders/{pk}/return/ — Student creates a return/exchange request."""
-    permission_classes = [IsStudent]
+    """POST /api/v1/orders/{pk}/return/ — Student or School creates a return/exchange request."""
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        order = get_object_or_404(Order, pk=pk, student_profile__parent=request.user)
+        user = request.user
+        if user.role == 'student':
+            order = get_object_or_404(Order, pk=pk, student_profile__parent=user)
+        elif user.role == 'school':
+            school = getattr(user, 'school_profile', None)
+            order = get_object_or_404(Order, pk=pk, school=school)
+        else:
+            return Response({'detail': 'Not authorized.'}, status=403)
 
-        # Only delivered orders can be returned
-        if order.status != OrderStatus.DELIVERED:
-            return Response({'detail': 'Only delivered orders can be returned.'}, status=400)
+        # Only delivered/collected orders can be returned
+        if order.status != OrderStatus.DELIVERED and order.distribution_status != 'collected':
+            return Response({'detail': 'Only delivered or collected orders can be returned.'}, status=400)
 
         # Prevent duplicate pending requests
         if ReturnRequest.objects.filter(order=order, status=ReturnRequestStatus.PENDING).exists():
@@ -84,6 +91,10 @@ class StudentReturnRequestListView(generics.ListAPIView):
         if user.role == 'student':
             return ReturnRequest.objects.filter(
                 order__student_profile__parent=user
+            ).select_related('order', 'order__student_profile', 'order__school', 'reviewed_by')
+        elif user.role == 'school':
+            return ReturnRequest.objects.filter(
+                order__school=getattr(user, 'school_profile', None)
             ).select_related('order', 'order__student_profile', 'order__school', 'reviewed_by')
         elif user.role == 'vendor':
             return ReturnRequest.objects.filter(

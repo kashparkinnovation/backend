@@ -10,6 +10,8 @@ from .views import (
     StudentCSVImportView,
     AdminVerificationQueueView,
     AdminVerificationActionView,
+    AdminStudentSchoolUpdateView,
+    AdminStudentListView,
 )
 
 app_name = 'students'
@@ -30,6 +32,8 @@ urlpatterns = [
     path('school/import/', StudentCSVImportView.as_view(), name='school-import'),
     
     # Admin-facing
+    path('admin/all/', AdminStudentListView.as_view(), name='admin-student-list'),
     path('admin/verification-requests/', AdminVerificationQueueView.as_view(), name='admin-verify-queue'),
     path('admin/verification-requests/<int:pk>/action/', AdminVerificationActionView.as_view(), name='admin-verify-action'),
+    path('admin/school-change/<int:pk>/', AdminStudentSchoolUpdateView.as_view(), name='admin-school-change'),
 ]

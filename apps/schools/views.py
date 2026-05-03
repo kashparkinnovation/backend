@@ -8,7 +8,7 @@ from .models import School, SchoolApprovalStatus
 from .serializers import SchoolSerializer, SchoolCreateSerializer, SchoolApprovalSerializer, AdminSchoolCreateSerializer
 from apps.users.permissions import IsAdmin, IsVendor, IsAdminOrVendor, IsSchool
 from apps.students.models import StudentProfile, VerificationRequest, VerificationStatus
-from apps.orders.models import Order, OrderStatus, DistributionStatus
+from apps.orders.models import Order, OrderStatus
 
 
 # ─── Public Views (no authentication required) ─────────────────────────────────
@@ -161,9 +161,8 @@ class SchoolDashboardView(APIView):
             school=school
         ).exclude(status__in=[OrderStatus.DELIVERED, OrderStatus.CANCELLED, OrderStatus.REFUNDED]).count()
         
-        ready_for_pickup = Order.objects.filter(
-            school=school,
-            distribution_status=DistributionStatus.READY_FOR_PICKUP
+        delivered_count = Order.objects.filter(
+            school=school, status=OrderStatus.DELIVERED
         ).count()
 
         return Response({
@@ -172,7 +171,7 @@ class SchoolDashboardView(APIView):
             'pending_verifications': pending_verifications,
             'total_orders': total_orders,
             'active_orders': active_orders,
-            'ready_for_pickup': ready_for_pickup,
+            'delivered_count': delivered_count,
             'school_name': school.name,
         })
 

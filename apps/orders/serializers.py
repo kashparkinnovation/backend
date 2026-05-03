@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Order, OrderItem, BulkOrder, DistributionStatus
+from .models import Order, OrderItem, BulkOrder
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -18,17 +18,21 @@ class OrderSerializer(serializers.ModelSerializer):
     bulk_order_number = serializers.CharField(source='bulk_order.bulk_order_number', read_only=True, default=None)
     vendor_details = serializers.SerializerMethodField()
 
+    can_cancel   = serializers.ReadOnlyField()
+    can_exchange = serializers.ReadOnlyField()
+
     class Meta:
         model  = Order
         fields = (
             'id', 'order_number', 'bulk_order', 'bulk_order_number',
             'student_profile', 'student_name',
             'school', 'school_name', 'vendor', 'vendor_name', 'vendor_details',
-            'status',
-            'subtotal', 'tax_amount', 'shipping_amount', 'total_amount',
+            'status', 'can_cancel', 'can_exchange',
+            'subtotal', 'tax_amount', 'shipping_amount', 'discount_amount', 'total_amount',
             'shipping_name', 'shipping_address', 'shipping_city',
             'shipping_state', 'shipping_pincode', 'shipping_phone',
-            'distribution_status', 'distributed_at',
+            'payment_method', 'payment_status',
+            'distributed_at', 'cancelled_at', 'cancelled_reason',
             'notes', 'items', 'created_at', 'updated_at',
         )
         read_only_fields = ('id', 'order_number', 'vendor', 'created_at', 'updated_at')
@@ -65,9 +69,6 @@ class OrderStatusUpdateSerializer(serializers.ModelSerializer):
         model  = Order
         fields = ('status',)
 
-
-class OrderDistributionSerializer(serializers.Serializer):
-    distribution_status = serializers.ChoiceField(choices=DistributionStatus.choices)
 
 
 # ─── Bulk Order ───────────────────────────────────────────────────────────────
@@ -118,3 +119,40 @@ class BulkOrderListSerializer(serializers.ModelSerializer):
             'id', 'bulk_order_number', 'school_name', 'vendor_name',
             'notes', 'total_orders', 'total_amount', 'created_at',
         )
+
+# ─── Cart ────────────────────────────────────────────────────────────────────
+
+from .models import Cart, CartItem
+
+class CartItemSerializer(serializers.ModelSerializer):
+    product_id = serializers.IntegerField(source='inventory.product.id', read_only=True)
+    school_id = serializers.IntegerField(source='inventory.product.school_id', read_only=True)
+    product_name = serializers.CharField(source='inventory.product.name', read_only=True)
+    product_image = serializers.SerializerMethodField()
+    size = serializers.CharField(source='inventory.size', read_only=True)
+    color = serializers.CharField(source='inventory.color', read_only=True)
+    unit_price = serializers.DecimalField(source='inventory.effective_price', max_digits=10, decimal_places=2, read_only=True)
+    total_price = serializers.ReadOnlyField()
+
+    class Meta:
+        model = CartItem
+        fields = ('id', 'inventory', 'quantity', 'product_id', 'school_id', 'product_name', 'product_image', 'size', 'color', 'unit_price', 'total_price')
+
+    def get_product_image(self, obj):
+        image = obj.inventory.product.images.filter(is_primary=True).first()
+        if not image:
+            image = obj.inventory.product.images.first()
+        if image and image.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(image.image.url)
+            return image.image.url
+        return None
+
+class CartSerializer(serializers.ModelSerializer):
+    items = CartItemSerializer(many=True, read_only=True)
+    total_price = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Cart
+        fields = ('id', 'user', 'items', 'total_price', 'created_at', 'updated_at')

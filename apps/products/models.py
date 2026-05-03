@@ -37,6 +37,11 @@ class Product(models.Model):
     category = models.CharField(max_length=50, choices=ProductCategory.choices, default=ProductCategory.OTHER)
     gender = models.CharField(max_length=10, choices=ProductGender.choices, default=ProductGender.UNISEX)
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Commission for school (percentage of sale price)
+    school_commission_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        help_text='School commission % on this product (overrides platform default)'
+    )
 
     # Rich product details
     material = models.CharField(max_length=255, blank=True)
@@ -97,6 +102,11 @@ class ProductInventory(models.Model):
     price_override = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True,
         help_text='If set, overrides the product base_price for this variant'
+    )
+    # Per-variant school commission override (if null, falls back to product level)
+    school_commission_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text='Variant-level school commission % (overrides product level if set)'
     )
     quantity = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

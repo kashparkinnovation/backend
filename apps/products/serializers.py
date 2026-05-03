@@ -14,7 +14,7 @@ class ProductInventorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductInventory
-        fields = ('id', 'size', 'color', 'price_override', 'quantity', 'effective_price')
+        fields = ('id', 'size', 'color', 'price_override', 'school_commission_percent', 'quantity', 'effective_price')
 
 
 class ProductInventoryDetailSerializer(serializers.ModelSerializer):
@@ -24,7 +24,7 @@ class ProductInventoryDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductInventory
-        fields = ('id', 'size', 'color', 'price_override', 'quantity', 'effective_price', 'product')
+        fields = ('id', 'size', 'color', 'price_override', 'school_commission_percent', 'quantity', 'effective_price', 'product')
 
     def get_product(self, obj):
         return {
@@ -47,7 +47,7 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'vendor', 'vendor_name', 'school', 'school_name',
             'name', 'description', 'sku', 'category', 'gender',
-            'base_price', 'material', 'care_instructions', 'tags',
+            'base_price', 'school_commission_percent', 'material', 'care_instructions', 'tags',
             'image', 'images', 'primary_image_url',
             'is_active', 'inventory', 'created_at', 'updated_at',
         )
@@ -72,7 +72,7 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         model = Product
         fields = (
             'school', 'name', 'description', 'sku', 'category', 'gender',
-            'base_price', 'material', 'care_instructions', 'tags',
+            'base_price', 'school_commission_percent', 'material', 'care_instructions', 'tags',
             'image', 'is_active',
         )
 

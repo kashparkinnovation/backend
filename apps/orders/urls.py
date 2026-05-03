@@ -4,12 +4,16 @@ from .views import (
     OrderCreateView,
     OrderDetailView,
     OrderStatusUpdateView,
+    OrderCancelView,
     SchoolOrderListView,
     SchoolOrderDetailView,
     SchoolOrderDistributionView,
     BulkOrderListCreateView,
     BulkOrderDetailView,
     BulkOrderCSVImportView,
+    CartView,
+    OrderInvoiceView,
+    OrderDeliverySlipView,
 )
 from .coupon_views import CouponListCreateView, CouponDetailView, CouponToggleView
 from .return_views import ReturnRequestCreateView, StudentReturnRequestListView, ReturnRequestActionView
@@ -19,9 +23,14 @@ app_name = 'orders'
 urlpatterns = [
     # General (vendor / student / school filtered by role)
     path('', OrderListView.as_view(), name='order-list'),
+    path('cart/', CartView.as_view(), name='cart-view'),
+    path('cart/items/', CartView.as_view(), name='cart-items-view'),
     path('create/', OrderCreateView.as_view(), name='order-create'),
     path('<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
     path('<int:pk>/status/', OrderStatusUpdateView.as_view(), name='order-status-update'),
+    path('<int:pk>/cancel/', OrderCancelView.as_view(), name='order-cancel'),
+    path('<int:pk>/invoice/', OrderInvoiceView.as_view(), name='order-invoice'),
+    path('<int:pk>/delivery-slip/', OrderDeliverySlipView.as_view(), name='order-delivery-slip'),
     path('<int:pk>/return/', ReturnRequestCreateView.as_view(), name='return-request-create'),
 
     # Return requests

@@ -29,7 +29,7 @@ class StorefrontProductListView(generics.ListAPIView):
     def get_queryset(self):
         qs = (
             Product.objects
-            .filter(is_active=True)
+            .filter(is_active=True, vendor__is_approved=True)
             .select_related('vendor', 'school')
             .prefetch_related('inventory', 'images')
         )
@@ -45,7 +45,7 @@ class StorefrontProductDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.AllowAny]
     queryset = (
         Product.objects
-        .filter(is_active=True)
+        .filter(is_active=True, vendor__is_approved=True)
         .select_related('vendor', 'school')
         .prefetch_related('inventory', 'images')
     )
@@ -208,12 +208,13 @@ class InventoryBulkCreateView(APIView):
             color = variant.get('color', '').strip()
             qty = variant.get('quantity', 0)
             price_override = variant.get('price_override') or None
+            school_commission_percent = variant.get('school_commission_percent') or None
 
             obj, created = ProductInventory.objects.update_or_create(
                 product=product,
                 size=size,
                 color=color,
-                defaults={'quantity': qty, 'price_override': price_override},
+                defaults={'quantity': qty, 'price_override': price_override, 'school_commission_percent': school_commission_percent},
             )
             results.append(ProductInventorySerializer(obj).data)
 

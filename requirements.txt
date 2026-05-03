@@ -32,3 +32,4 @@ gunicorn>=22.0.0
 
 # Dev / debug
 django-extensions>=3.2.3
+reportlab

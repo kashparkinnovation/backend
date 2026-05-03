@@ -76,6 +76,44 @@ class StudentProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
         return StudentProfile.objects.none()
 
 
+class AdminStudentListView(generics.ListAPIView):
+    """GET /api/v1/students/admin/all/ — Admin lists all students globally."""
+    from apps.users.permissions import IsAdmin
+    serializer_class = StudentProfileSerializer
+    permission_classes = [IsAdmin]
+    search_fields = ['student_name', 'roll_number', 'parent__email']
+    filterset_fields = ['is_verified', 'school']
+
+    def get_queryset(self):
+        return StudentProfile.objects.select_related('school', 'parent').order_by('-created_at')
+
+
+class AdminStudentSchoolUpdateView(APIView):
+    """PATCH /api/v1/students/admin/school-change/{id}/ — Admin changes student's school."""
+    from apps.users.permissions import IsAdmin
+    permission_classes = [IsAdmin]
+
+    def patch(self, request, pk):
+        from apps.schools.models import School
+        student = get_object_or_404(StudentProfile, pk=pk)
+        new_school_id = request.data.get('school_id')
+        if not new_school_id:
+            return Response({'detail': 'school_id is required.'}, status=400)
+            
+        new_school = get_object_or_404(School, pk=new_school_id)
+        
+        # Invalidate old verification and update school
+        student.school = new_school
+        student.is_verified = False
+        student.verified_at = None
+        student.save()
+        
+        # Optional: Delete pending verification requests
+        VerificationRequest.objects.filter(student=student, status=VerificationStatus.PENDING).delete()
+        
+        return Response(StudentProfileSerializer(student).data)
+
+
 # ─── Verification Request Views ───────────────────────────────────────────────
 
 class VerificationRequestCreateView(APIView):
@@ -157,6 +195,7 @@ class AdminVerificationQueueView(generics.ListAPIView):
     from apps.users.permissions import IsAdmin
     permission_classes = [IsAdmin]
     filterset_fields = ['status']
+    search_fields = ['student__student_name', 'student__roll_number', 'student__school__name']
 
     def get_queryset(self):
         qs = VerificationRequest.objects.select_related(

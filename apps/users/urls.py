@@ -7,6 +7,8 @@ from .views import (
     AdminDelegateAccessView,
     OTPLoginView, OTPSignupView, OTPForgotPasswordView,
     EmailOTPLoginView, EmailOTPSignupView, EmailOTPForgotPasswordView,
+    SendEmailOTPView, RegisterWithEmailOTPView,
+    AdminUserToggleActiveView,
 )
 
 app_name = 'users'
@@ -23,6 +25,7 @@ urlpatterns = [
     path('me/', MeView.as_view(), name='me'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('delegate-access/', AdminDelegateAccessView.as_view(), name='delegate-access'),
+    path('users/<int:pk>/toggle-active/', AdminUserToggleActiveView.as_view(), name='toggle-user-active'),
     path('leads/', PublicContactLeadView.as_view(), name='public-leads'),
     path('otp/login/',           OTPLoginView.as_view(),           name='otp-login'),
     path('otp/register/',         OTPSignupView.as_view(),          name='otp-register'),
@@ -31,5 +34,8 @@ urlpatterns = [
     path('otp/email-login/',           EmailOTPLoginView.as_view(),          name='otp-email-login'),
     path('otp/email-register/',        EmailOTPSignupView.as_view(),         name='otp-email-register'),
     path('otp/email-forgot-password/', EmailOTPForgotPasswordView.as_view(), name='otp-email-forgot-password'),
+    # Email 6-digit OTP for password-based signup
+    path('email-otp/send/',     SendEmailOTPView.as_view(),         name='email-otp-send'),
+    path('email-otp/register/', RegisterWithEmailOTPView.as_view(), name='email-otp-register'),
     path('', include(router.urls)),
 ]

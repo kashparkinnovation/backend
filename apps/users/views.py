@@ -1,3 +1,7 @@
+import random
+from django.core.cache import cache
+from django.core.mail import send_mail
+from django.conf import settings
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -84,6 +88,7 @@ class AdminUserViewSet(viewsets.ModelViewSet):
     """
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    search_fields = ['first_name', 'last_name', 'email']
 
     def get_queryset(self):
         return CustomUser.objects.filter(role=UserRole.ADMIN).order_by('-created_at')
@@ -136,6 +141,20 @@ class AdminDelegateAccessView(APIView):
         user = get_object_or_404(CustomUser, id=target_user_id)
         tokens = TokenResponseSerializer.get_tokens_for_user(user)
         return Response(tokens, status=status.HTTP_200_OK)
+
+
+class AdminUserToggleActiveView(APIView):
+    """PATCH /api/v1/auth/users/{id}/toggle-active/ — Admin toggles user is_active flag."""
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def patch(self, request, pk):
+        user = get_object_or_404(CustomUser, id=pk)
+        if user == request.user:
+            return Response({'detail': 'Cannot deactivate yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user.is_active = not user.is_active
+        user.save(update_fields=['is_active'])
+        return Response({'id': user.id, 'is_active': user.is_active})
 
 
 class OTPLoginView(APIView):
@@ -218,3 +237,119 @@ class EmailOTPForgotPasswordView(APIView):
         user.set_password(serializer.validated_data['password'])
         user.save()
         return Response({'detail': 'Password reset successfully.'}, status=status.HTTP_200_OK)
+
+
+# ─── Email OTP (6-digit code) for password-based signup ────────────────────────
+
+def _otp_cache_key(email: str) -> str:
+    return f'signup_email_otp_{email.lower().strip()}'
+
+
+class SendEmailOTPView(APIView):
+    """
+    POST /api/v1/auth/email-otp/send/
+    Generates a 6-digit OTP, caches it (10 min), and emails it to the user.
+    Body: { "email": "user@example.com" }
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        if not email:
+            return Response({'email': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if CustomUser.objects.filter(email=email).exists():
+            return Response(
+                {'email': 'An account with this email already exists. Please log in.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp = str(random.randint(100000, 999999))
+        cache.set(_otp_cache_key(email), otp, timeout=600)  # 10 minutes
+
+        try:
+            send_mail(
+                subject='eSchoolKart — Email Verification OTP',
+                message=(
+                    f'Your eSchoolKart verification code is: {otp}\n\n'
+                    'This code is valid for 10 minutes. Do not share it with anyone.'
+                ),
+                html_message=(
+                    f'<div style="font-family:sans-serif;max-width:480px;margin:auto;">'
+                    f'<h2 style="color:#4f46e5;">eSchoolKart</h2>'
+                    f'<p>Your email verification code is:</p>'
+                    f'<div style="font-size:2.5rem;font-weight:700;letter-spacing:0.5rem;'
+                    f'color:#1e1b4b;margin:1rem 0;">{otp}</div>'
+                    f'<p style="color:#6b7280;font-size:0.875rem;">'
+                    f'Valid for 10 minutes. Do not share this code.</p></div>'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            return Response(
+                {'detail': f'Failed to send email: {e}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({'detail': 'OTP sent successfully.'}, status=status.HTTP_200_OK)
+
+
+class RegisterWithEmailOTPView(APIView):
+    """
+    POST /api/v1/auth/email-otp/register/
+    Verifies the 6-digit OTP then creates the student account.
+    Body: { email, first_name, last_name, password, email_otp }
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email    = request.data.get('email', '').strip().lower()
+        otp      = str(request.data.get('email_otp', '')).strip()
+        password = request.data.get('password', '')
+        first_name = request.data.get('first_name', '').strip()
+        last_name  = request.data.get('last_name', '').strip()
+
+        # Validate required fields
+        errors = {}
+        if not email:      errors['email']      = 'Required.'
+        if not otp:        errors['email_otp']  = 'Required.'
+        if not password:   errors['password']   = 'Required.'
+        if not first_name: errors['first_name'] = 'Required.'
+        if not last_name:  errors['last_name']  = 'Required.'
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify OTP
+        key = _otp_cache_key(email)
+        stored_otp = cache.get(key)
+        if not stored_otp:
+            return Response(
+                {'email_otp': 'OTP expired or not found. Please request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if stored_otp != otp:
+            return Response(
+                {'email_otp': 'Incorrect OTP. Please try again.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        cache.delete(key)  # consume OTP
+
+        # Check duplicate
+        if CustomUser.objects.filter(email=email).exists():
+            return Response(
+                {'email': 'An account with this email already exists.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create user
+        user = CustomUser.objects.create_user(
+            email=email, password=password,
+            first_name=first_name, last_name=last_name,
+            role='student', is_active=True,
+        )
+
+        tokens = TokenResponseSerializer.get_tokens_for_user(user)
+        return Response(tokens, status=status.HTTP_201_CREATED)

@@ -36,8 +36,16 @@ class StudentProfile(models.Model):
     updated_at     = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table     = 'student_profiles'
-        unique_together = ('school', 'roll_number')
+        db_table = 'student_profiles'
+        # Note: uniqueness for non-blank roll_number is enforced in the serializer
+        # to allow multiple students with blank roll numbers in the same school.
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'roll_number'],
+                condition=~models.Q(roll_number=''),
+                name='unique_school_roll_number_nonempty'
+            )
+        ]
 
     def __str__(self):
         return f'{self.student_name} — {self.school.name}'

@@ -1,21 +1,21 @@
 import csv
 import io
 from decimal import Decimal
+from django.db import models, transaction
+from django.utils import timezone
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
-from django.utils import timezone
-from django.shortcuts import get_object_or_404
-from django.db import transaction
+from rest_framework import permissions
 
-from .models import Order, OrderItem, BulkOrder, OrderStatus, DistributionStatus
+from .models import Order, OrderItem, BulkOrder, OrderStatus, CANCELLABLE_STATUSES
 from .serializers import (
     OrderSerializer,
     OrderCreateSerializer,
     OrderStatusUpdateSerializer,
-    OrderDistributionSerializer,
     BulkOrderCreateSerializer,
     BulkOrderSerializer,
     BulkOrderListSerializer,
@@ -83,6 +83,20 @@ class OrderCreateView(APIView):
         for item in data['items']:
             inv = get_object_or_404(ProductInventory, pk=item['inventory_id'])
             qty = int(item['quantity'])
+
+            # ── Inventory check & deduction (atomic) ────────────────────────
+            updated = (
+                ProductInventory.objects
+                .filter(pk=inv.pk, quantity__gte=qty)
+                .select_for_update()
+                .update(quantity=models.F('quantity') - qty)
+            )
+            if not updated:
+                return Response(
+                    {'detail': f'"{inv.product.name} ({inv.size})" has insufficient stock.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             price = inv.effective_price
             OrderItem.objects.create(
                 order        = order,
@@ -97,7 +111,7 @@ class OrderCreateView(APIView):
 
         order.subtotal     = subtotal
         order.total_amount = subtotal
-        order.save(update_fields=['subtotal', 'total_amount'])
+        order.save(update_fields=['subtotal', 'total_amount', 'platform_fee', 'vendor_payout_amount'])
 
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 
@@ -120,22 +134,122 @@ class OrderDetailView(generics.RetrieveAPIView):
 
 
 class OrderStatusUpdateView(APIView):
-    """PATCH /api/v1/orders/{pk}/status/ — Vendor updates order status."""
-    permission_classes = [IsVendor]
+    """PATCH /api/v1/orders/{pk}/status/ — Vendor or Admin updates order status."""
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
-        order = get_object_or_404(Order, pk=pk, vendor__user=request.user)
-        serializer = OrderStatusUpdateSerializer(order, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        user = request.user
+        if user.role == 'vendor':
+            order = get_object_or_404(Order, pk=pk, vendor__user=user)
+        elif user.role == 'admin':
+            order = get_object_or_404(Order, pk=pk)
+        else:
+            return Response({'detail': 'Not authorized.'}, status=403)
 
-        # Refresh from DB to get the freshly saved status before checking
-        order.refresh_from_db()
-        if order.status == OrderStatus.DELIVERED:
-            order.distribution_status = DistributionStatus.READY_FOR_PICKUP
-            order.save(update_fields=['distribution_status'])
+        new_status = request.data.get('status')
+        if new_status not in OrderStatus.values:
+            return Response({'detail': f'Invalid status: {new_status}'}, status=400)
+
+        # Prevent re-opening cancelled/refunded orders
+        if order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
+            return Response({'detail': 'Cannot update a cancelled or refunded order.'}, status=400)
+
+        order.status = new_status
+        order.save(update_fields=['status', 'updated_at'])
+        return Response(OrderSerializer(order).data)
+
+
+class OrderCancelView(APIView):
+    """POST /api/v1/orders/{pk}/cancel/ — Student or School cancels order (till Confirmed only)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        user = request.user
+        if user.role == 'student':
+            order = get_object_or_404(Order, pk=pk, student_profile__parent=user)
+        elif user.role == 'school':
+            school = getattr(user, 'school_profile', None)
+            order = get_object_or_404(Order, pk=pk, school=school)
+        elif user.role == 'admin':
+            order = get_object_or_404(Order, pk=pk)
+        else:
+            return Response({'detail': 'Not authorized.'}, status=403)
+
+        if not order.can_cancel:
+            return Response(
+                {'detail': f'Order cannot be cancelled at status "{order.get_status_display()}". '
+                           'Cancellation is only allowed before order is confirmed.'},
+                status=400
+            )
+
+        reason = request.data.get('reason', '')
+        with transaction.atomic():
+            # Restore inventory
+            for item in order.items.select_related('inventory').all():
+                if item.inventory:
+                    ProductInventory.objects.filter(pk=item.inventory_id).update(
+                        quantity=models.F('quantity') + item.quantity
+                    )
+            from django.utils import timezone
+            order.status = OrderStatus.CANCELLED
+            order.cancelled_at = timezone.now()
+            order.cancelled_reason = reason
+            order.save(update_fields=['status', 'cancelled_at', 'cancelled_reason', 'updated_at'])
 
         return Response(OrderSerializer(order).data)
+
+
+from django.http import HttpResponse
+from .pdf import generate_invoice_pdf, generate_delivery_slip_pdf
+
+class OrderInvoiceView(APIView):
+    """GET /api/v1/orders/{pk}/invoice/ — Download PDF Invoice"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        user = request.user
+        if user.role == 'student':
+            order = get_object_or_404(Order, pk=pk, student_profile__parent=user)
+        elif user.role == 'school':
+            school = getattr(user, 'school_profile', None)
+            order = get_object_or_404(Order, pk=pk, school=school)
+        elif user.role == 'vendor':
+            order = get_object_or_404(Order, pk=pk, vendor__user=user)
+        elif user.role == 'admin':
+            order = get_object_or_404(Order, pk=pk)
+        else:
+            return Response({'detail': 'Not authorized.'}, status=403)
+
+        pdf_bytes = generate_invoice_pdf(order)
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Invoice_{order.order_number}.pdf"'
+        return response
+
+
+class OrderDeliverySlipView(APIView):
+    """GET /api/v1/orders/{pk}/delivery-slip/ — Download PDF Delivery Slip"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        user = request.user
+        # Usually vendor or admin needs delivery slip, but keep access consistent
+        if user.role == 'student':
+            order = get_object_or_404(Order, pk=pk, student_profile__parent=user)
+        elif user.role == 'school':
+            school = getattr(user, 'school_profile', None)
+            order = get_object_or_404(Order, pk=pk, school=school)
+        elif user.role == 'vendor':
+            order = get_object_or_404(Order, pk=pk, vendor__user=user)
+        elif user.role == 'admin':
+            order = get_object_or_404(Order, pk=pk)
+        else:
+            return Response({'detail': 'Not authorized.'}, status=403)
+
+        pdf_bytes = generate_delivery_slip_pdf(order)
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="DeliverySlip_{order.order_number}.pdf"'
+        return response
+
 
 
 # ─── School-facing Orders ─────────────────────────────────────────────────────
@@ -177,22 +291,24 @@ class SchoolOrderDetailView(generics.RetrieveAPIView):
 
 
 class SchoolOrderDistributionView(APIView):
-    """PATCH /api/v1/orders/school/{pk}/distribute/ — Mark as collected/ready/returned."""
+    """PATCH /api/v1/orders/school/{pk}/distribute/ — School marks order as DISTRIBUTED."""
     permission_classes = [IsSchool]
 
     def patch(self, request, pk):
         school = getattr(request.user, 'school_profile', None)
         order  = get_object_or_404(Order, pk=pk, school=school)
 
-        serializer = OrderDistributionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if order.status != OrderStatus.DELIVERED:
+            return Response(
+                {'detail': 'Order must be in Delivered status before marking as Distributed.'},
+                status=400
+            )
 
-        new_status = serializer.validated_data['distribution_status']
-        order.distribution_status = new_status
-        if new_status == DistributionStatus.COLLECTED:
-            order.distributed_at = timezone.now()
-            order.distributed_by = request.user
-        order.save(update_fields=['distribution_status', 'distributed_at', 'distributed_by'])
+        from django.utils import timezone
+        order.status         = OrderStatus.DISTRIBUTED
+        order.distributed_at = timezone.now()
+        order.distributed_by = request.user
+        order.save(update_fields=['status', 'distributed_at', 'distributed_by', 'updated_at'])
 
         return Response(OrderSerializer(order).data)
 
@@ -381,3 +497,63 @@ class BulkOrderCSVImportView(APIView):
             'bulk_order': BulkOrderSerializer(bulk).data,
             'errors':     errors,
         }, status=status.HTTP_201_CREATED)
+
+# ─── Cart Views ───────────────────────────────────────────────────────────────
+
+from .models import Cart, CartItem
+from .serializers import CartSerializer, CartItemSerializer
+from apps.products.models import ProductInventory
+from rest_framework.decorators import action
+
+class CartView(APIView):
+    """
+    GET /api/v1/orders/cart/ — Get current cart for authenticated user
+    POST /api/v1/orders/cart/items/ — Add/Update item (body: { inventory_id: 1, quantity: 1 })
+    DELETE /api/v1/orders/cart/items/{inventory_id}/ — Remove item
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_cart(self, user):
+        cart, _ = Cart.objects.get_or_create(user=user)
+        return cart
+
+    def get(self, request):
+        cart = self._get_cart(request.user)
+        return Response(CartSerializer(cart, context={'request': request}).data)
+
+    def post(self, request):
+        cart = self._get_cart(request.user)
+        inventory_id = request.data.get('inventory_id')
+        quantity = request.data.get('quantity', 1)
+        
+        if not inventory_id:
+            return Response({'detail': 'inventory_id is required'}, status=400)
+            
+        inventory = get_object_or_404(ProductInventory, id=inventory_id)
+        
+        # Check stock limits
+        if int(quantity) > inventory.quantity:
+            return Response({'detail': f'Not enough stock. Only {inventory.quantity} available.'}, status=400)
+            
+        cart_item, created = CartItem.objects.get_or_create(
+            cart=cart, 
+            inventory=inventory,
+            defaults={'quantity': int(quantity)}
+        )
+        
+        if not created:
+            # If item already exists, we set the new quantity
+            cart_item.quantity = int(quantity)
+            cart_item.save()
+            
+        return Response(CartSerializer(cart, context={'request': request}).data)
+
+    def delete(self, request):
+        cart = self._get_cart(request.user)
+        inventory_id = request.data.get('inventory_id')
+        
+        if not inventory_id:
+            return Response({'detail': 'inventory_id is required'}, status=400)
+            
+        cart.items.filter(inventory_id=inventory_id).delete()
+        return Response(CartSerializer(cart, context={'request': request}).data)

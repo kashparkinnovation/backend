@@ -19,7 +19,7 @@ class VendorSerializer(serializers.ModelSerializer):
 class AdminVendorCreateSerializer(serializers.ModelSerializer):
     vendor_email = serializers.EmailField(write_only=True)
     vendor_password = serializers.CharField(write_only=True)
-    school_id = serializers.IntegerField(write_only=True)
+    school_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = Vendor
@@ -35,7 +35,7 @@ class AdminVendorCreateSerializer(serializers.ModelSerializer):
 
         vendor_email = validated_data.pop('vendor_email')
         vendor_password = validated_data.pop('vendor_password')
-        school_id = validated_data.pop('school_id')
+        school_id = validated_data.pop('school_id', None)
 
         # Create/Get vendor user profile
         user, created = CustomUser.objects.get_or_create(
@@ -57,8 +57,9 @@ class AdminVendorCreateSerializer(serializers.ModelSerializer):
 
         vendor = Vendor.objects.create(**validated_data)
 
-        # Attach to the Target School (replaces any active vendor)
-        School.objects.filter(id=school_id).update(vendor=vendor)
+        # Attach to the Target School (replaces any active vendor) if provided
+        if school_id:
+            School.objects.filter(id=school_id).update(vendor=vendor)
 
         return vendor
 
