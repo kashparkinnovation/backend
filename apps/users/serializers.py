@@ -98,6 +98,7 @@ class OTPLoginSerializer(serializers.Serializer):
 class OTPSignupSerializer(serializers.ModelSerializer):
     id_token = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True, required=False, validators=[validate_password])
+    email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
     role = serializers.ChoiceField(
         choices=[UserRole.STUDENT],
         default=UserRole.STUDENT
@@ -121,8 +122,8 @@ class OTPSignupSerializer(serializers.ModelSerializer):
             if CustomUser.objects.filter(phone=phone).exists():
                 raise serializers.ValidationError({'phone': 'A user with this phone number already exists.'})
                 
-            # Check email uniqueness
-            if CustomUser.objects.filter(email=email).exists():
+            # Check email uniqueness ONLY if provided
+            if email and CustomUser.objects.filter(email=email).exists():
                 raise serializers.ValidationError({'email': 'A user with this email address already exists.'})
                 
             attrs['phone'] = phone

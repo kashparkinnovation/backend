@@ -1,1 +1,4 @@
 firebase-service-account.json
+apps/orders/__pycache__/models.cpython-313.pyc
+__pycache__
+*.pyc
