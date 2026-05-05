@@ -31,7 +31,7 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
             'name', 'code', 'address', 'city', 'state', 'pincode',
             'contact_email', 'contact_phone', 'logo',
         )
-        read_only_fields = ('code',)
+        # code is writable on creation so vendors can set their school identifier
 
 
 class AdminSchoolCreateSerializer(serializers.ModelSerializer):
@@ -51,12 +51,15 @@ class AdminSchoolCreateSerializer(serializers.ModelSerializer):
         school_email = validated_data.pop('school_email')
         school_password = validated_data.pop('school_password')
 
+        school_name = validated_data.get('name', '')
+
         # Create user account for the school staff
         user, created = CustomUser.objects.get_or_create(
             email=school_email,
             defaults={
-                'first_name': validated_data.get('name'),
-                'role': UserRole.SCHOOL
+                'first_name': school_name[:100],  # cap to field max_length
+                'last_name': '',
+                'role': UserRole.SCHOOL,
             }
         )
         if created or not user.has_usable_password():

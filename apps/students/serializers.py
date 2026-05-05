@@ -19,16 +19,27 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'parent', 'is_verified', 'verified_at', 'created_at', 'updated_at')
 
     def validate(self, attrs):
-        roll_number = attrs.get('roll_number', '')
-        school      = attrs.get('school', getattr(self.instance, 'school', None))
+        roll_number = attrs.get('roll_number', '').strip()
+        school      = attrs.get('school',     getattr(self.instance, 'school',     None))
+        class_name  = attrs.get('class_name', getattr(self.instance, 'class_name', ''))
+        section     = attrs.get('section',    getattr(self.instance, 'section',    ''))
+
         if roll_number and school:
-            qs = StudentProfile.objects.filter(school=school, roll_number=roll_number)
+            qs = StudentProfile.objects.filter(
+                school=school,
+                class_name=class_name,
+                section=section,
+                roll_number=roll_number,
+            )
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
-                raise serializers.ValidationError(
-                    {'roll_number': 'A student with this roll number already exists in this school.'}
-                )
+                raise serializers.ValidationError({
+                    'roll_number': (
+                        f'Roll number {roll_number} is already taken in '
+                        f'{class_name} {section} at this school.'
+                    )
+                })
         return attrs
 
     def get_pending_verification(self, obj):

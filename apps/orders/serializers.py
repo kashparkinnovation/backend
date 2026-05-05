@@ -12,9 +12,9 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items        = OrderItemSerializer(many=True, read_only=True)
-    student_name = serializers.CharField(source='student_profile.student_name', read_only=True)
-    school_name  = serializers.CharField(source='school.name', read_only=True)
-    vendor_name  = serializers.CharField(source='vendor.business_name', read_only=True)
+    student_name = serializers.SerializerMethodField()
+    school_name  = serializers.CharField(source='school.name', read_only=True, allow_null=True)
+    vendor_name  = serializers.SerializerMethodField()
     bulk_order_number = serializers.CharField(source='bulk_order.bulk_order_number', read_only=True, default=None)
     vendor_details = serializers.SerializerMethodField()
 
@@ -36,6 +36,16 @@ class OrderSerializer(serializers.ModelSerializer):
             'notes', 'items', 'created_at', 'updated_at',
         )
         read_only_fields = ('id', 'order_number', 'vendor', 'created_at', 'updated_at')
+
+    def get_student_name(self, obj):
+        if obj.student_profile:
+            return obj.student_profile.student_name
+        return None
+
+    def get_vendor_name(self, obj):
+        if obj.vendor:
+            return obj.vendor.business_name
+        return None
 
     def get_vendor_details(self, obj):
         if not obj.vendor:

@@ -7,25 +7,22 @@ from apps.users.models import CustomUser
 
 
 class OrderStatus(models.TextChoices):
-    PLACED               = 'placed',               '01 Placed'
-    AWAITING_CONFIRMATION = 'awaiting_confirmation', '02 Awaiting Confirmation'
-    CONFIRMED            = 'confirmed',            '03 Confirmed'
-    PROCESSING           = 'processing',           '04 Processing'
-    SHIPPED              = 'shipped',              '05 Shipped'
-    DELIVERED            = 'delivered',            '06 Delivered'
-    DISTRIBUTED          = 'distributed',          '07 Distributed'
-    CANCELLED            = 'cancelled',            '08 Cancelled'
-    REFUNDED             = 'refunded',             '09 Refunded'
+    AWAITING_CONFIRMATION = 'awaiting_confirmation', '01 Awaiting Confirmation'
+    PROCESSING            = 'processing',            '02 Processing'
+    SHIPPED               = 'shipped',               '03 Shipped'
+    DELIVERED             = 'delivered',             '04 Delivered'
+    DISTRIBUTED           = 'distributed',           '05 Distributed'
+    CANCELLED             = 'cancelled',             '06 Cancelled'
+    REFUNDED              = 'refunded',              '07 Refunded'
 
 
-# Statuses from which a customer/school can cancel
+# Cancellable before vendor starts processing
 CANCELLABLE_STATUSES = {
-    OrderStatus.PLACED,
     OrderStatus.AWAITING_CONFIRMATION,
-    OrderStatus.CONFIRMED,
+    OrderStatus.PROCESSING,
 }
 
-# Statuses after which exchange can be raised (only DISTRIBUTED)
+# Exchange allowed only after distributed
 EXCHANGEABLE_STATUSES = {OrderStatus.DISTRIBUTED}
 
 
@@ -139,7 +136,7 @@ class Order(models.Model):
 
     order_number = models.CharField(max_length=50, unique=True)
     status       = models.CharField(
-        max_length=25, choices=OrderStatus.choices, default=OrderStatus.PLACED
+        max_length=25, choices=OrderStatus.choices, default=OrderStatus.AWAITING_CONFIRMATION
     )
 
     subtotal        = models.DecimalField(max_digits=10, decimal_places=2, default=0)

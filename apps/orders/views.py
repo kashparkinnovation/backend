@@ -46,6 +46,8 @@ class OrderListView(generics.ListAPIView):
             return qs.filter(school=school) if school else Order.objects.none()
         elif user.role == 'student':
             return qs.filter(student_profile__parent=user)
+        elif user.role == 'admin' or user.is_staff:
+            return qs
         return Order.objects.none()
 
 
@@ -178,7 +180,7 @@ class OrderCancelView(APIView):
         if not order.can_cancel:
             return Response(
                 {'detail': f'Order cannot be cancelled at status "{order.get_status_display()}". '
-                           'Cancellation is only allowed before order is confirmed.'},
+                           'Cancellation is only allowed before order is shipped.'},
                 status=400
             )
 

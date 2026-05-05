@@ -57,9 +57,9 @@ class ReturnRequestCreateView(APIView):
         else:
             return Response({'detail': 'Not authorized.'}, status=403)
 
-        # Only delivered/collected orders can be returned
-        if order.status != OrderStatus.DELIVERED and order.distribution_status != 'collected':
-            return Response({'detail': 'Only delivered or collected orders can be returned.'}, status=400)
+        # Only distributed orders can be returned/exchanged
+        if order.status != OrderStatus.DISTRIBUTED:
+            return Response({'detail': 'Return/exchange requests can only be raised after the order has been distributed.'}, status=400)
 
         # Prevent duplicate pending requests
         if ReturnRequest.objects.filter(order=order, status=ReturnRequestStatus.PENDING).exists():

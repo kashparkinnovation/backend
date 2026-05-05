@@ -70,7 +70,7 @@ class AdminPlatformStatsView(APIView):
             if count:
                 orders_by_status[s] = count
 
-        active_statuses = [OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]
+        active_statuses = [OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.DISTRIBUTED]
         total_revenue = float(
             Order.objects.filter(status__in=active_statuses)
             .aggregate(total=Sum('total_amount'))['total'] or 0

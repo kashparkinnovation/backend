@@ -3,11 +3,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.utils import timezone
-from django.db.models import Sum, Count, Q
-from datetime import timedelta
+from django.db.models import Sum, Count, Q, F, ExpressionWrapper, DecimalField
+from django.contrib.auth import get_user_model
 from .models import Vendor
 from .serializers import VendorSerializer, VendorApprovalSerializer, AdminVendorCreateSerializer
 from apps.users.permissions import IsAdmin, IsVendor
+from apps.schools.models import School, SchoolApprovalStatus
+from apps.products.models import Product, ProductInventory
+from apps.orders.models import Order, OrderItem, OrderStatus
+from apps.orders.serializers import OrderSerializer
 
 
 class VendorProfileView(generics.RetrieveUpdateAPIView):
@@ -27,10 +31,6 @@ class VendorDashboardView(APIView):
 
     def get(self, request):
         vendor = request.user.vendor_profile
-
-        from apps.schools.models import School, SchoolApprovalStatus
-        from apps.products.models import Product, ProductInventory
-        from apps.orders.models import Order, OrderStatus
 
         now = timezone.now()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -62,28 +62,27 @@ class VendorDashboardView(APIView):
 
         pending_orders = Order.objects.filter(
             vendor=vendor,
-            status=OrderStatus.PENDING,
+            status=OrderStatus.AWAITING_CONFIRMATION,
         ).count()
 
         processing_orders = Order.objects.filter(
             vendor=vendor,
-            status__in=[OrderStatus.CONFIRMED, OrderStatus.PROCESSING],
+            status__in=[OrderStatus.PROCESSING, OrderStatus.SHIPPED],
         ).count()
 
         revenue_this_month = Order.objects.filter(
             vendor=vendor,
             created_at__gte=month_start,
-            status__in=[OrderStatus.DELIVERED, OrderStatus.SHIPPED, OrderStatus.PROCESSING, OrderStatus.CONFIRMED],
+            status__in=[OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.DISTRIBUTED],
         ).aggregate(total=Sum('total_amount'))['total'] or 0
 
         total_revenue = Order.objects.filter(
             vendor=vendor,
-            status__in=[OrderStatus.DELIVERED, OrderStatus.SHIPPED, OrderStatus.PROCESSING, OrderStatus.CONFIRMED],
+            status__in=[OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.DISTRIBUTED],
         ).aggregate(total=Sum('total_amount'))['total'] or 0
 
         # Recent orders
         recent_orders = Order.objects.filter(vendor=vendor).order_by('-created_at')[:5]
-        from apps.orders.serializers import OrderSerializer
         recent_orders_data = OrderSerializer(recent_orders, many=True).data
 
         return Response({
@@ -163,12 +162,12 @@ class VendorCustomerListView(APIView):
 
     def get(self, request):
         vendor = request.user.vendor_profile
-        from apps.orders.models import Order
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
 
-        # Get all distinct parents who have placed an order with this vendor
-        orders = Order.objects.filter(vendor=vendor).select_related('student_profile__parent', 'school')
+        # Only orders that have a student_profile (excludes bulk/anonymous orders)
+        orders = Order.objects.filter(
+            vendor=vendor,
+            student_profile__isnull=False,
+        ).select_related('student_profile__parent', 'school')
 
         # Aggregate per parent
         customer_map = {}
@@ -207,35 +206,41 @@ class VendorAnalyticsView(APIView):
     """GET /api/v1/vendors/analytics/ — Revenue and order analytics."""
     permission_classes = [IsVendor]
 
+    @staticmethod
+    def _month_range(year, month):
+        """Return (start_date, end_date) for a given year/month using only stdlib."""
+        import calendar
+        import datetime
+        _, last_day = calendar.monthrange(year, month)
+        start = datetime.date(year, month, 1)
+        end = datetime.date(year, month, last_day)
+        return start, end
+
     def get(self, request):
         vendor = request.user.vendor_profile
-        from apps.orders.models import Order, OrderStatus
-        from apps.products.models import Product
-        from django.db.models import Sum, Count
         import datetime
+        import calendar
 
-        now = timezone.now().date()
+        today = timezone.now().date()
 
-        # Last 6 months revenue
+        # Last 6 months revenue — accurate calendar-aware month boundaries
         monthly = []
         for i in range(5, -1, -1):
-            # Calculate month start/end
-            month_date = now.replace(day=1) - datetime.timedelta(days=i * 28)
-            month_date = month_date.replace(day=1)
-            if month_date.month == 12:
-                next_month = month_date.replace(year=month_date.year + 1, month=1)
-            else:
-                next_month = month_date.replace(month=month_date.month + 1)
+            # Subtract i months from current month accurately
+            total_months = today.month - 1 - i
+            year = today.year + total_months // 12
+            month = total_months % 12 + 1
+            start, end = self._month_range(year, month)
 
             rev = Order.objects.filter(
                 vendor=vendor,
-                created_at__date__gte=month_date,
-                created_at__date__lt=next_month,
-                status__in=[OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED],
+                created_at__date__gte=start,
+                created_at__date__lte=end,
+                status__in=[OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.DISTRIBUTED],
             ).aggregate(total=Sum('total_amount'))['total'] or 0
 
             monthly.append({
-                'month': month_date.strftime('%b %Y'),
+                'month': start.strftime('%b %Y'),
                 'revenue': float(rev),
             })
 
@@ -246,18 +251,21 @@ class VendorAnalyticsView(APIView):
             if count:
                 status_breakdown[s] = count
 
-        # Top products by revenue
-        from apps.orders.models import OrderItem
+        # Top products by revenue — correctly multiply unit_price × quantity
         top_products = (
             OrderItem.objects
             .filter(order__vendor=vendor)
             .values('product_name')
-            .annotate(total_revenue=Sum('unit_price'), total_qty=Sum('quantity'))
+            .annotate(
+                total_revenue=Sum(
+                    ExpressionWrapper(F('unit_price') * F('quantity'), output_field=DecimalField())
+                ),
+                total_qty=Sum('quantity'),
+            )
             .order_by('-total_revenue')[:10]
         )
 
         # Top schools by revenue
-        from apps.schools.models import School
         top_schools = (
             Order.objects
             .filter(vendor=vendor, school__isnull=False)
@@ -280,8 +288,6 @@ class VendorLedgerView(APIView):
 
     def get(self, request):
         vendor = request.user.vendor_profile
-        from apps.orders.models import Order
-        from django.db.models import Sum
 
         # Aggregate amounts based on payout_status
         aggregates = Order.objects.filter(vendor=vendor).values('payout_status').annotate(

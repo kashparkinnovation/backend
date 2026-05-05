@@ -37,15 +37,12 @@ class StudentProfile(models.Model):
 
     class Meta:
         db_table = 'student_profiles'
-        # Note: uniqueness for non-blank roll_number is enforced in the serializer
-        # to allow multiple students with blank roll numbers in the same school.
-        constraints = [
-            models.UniqueConstraint(
-                fields=['school', 'roll_number'],
-                condition=~models.Q(roll_number=''),
-                name='unique_school_roll_number_nonempty'
-            )
-        ]
+        # Roll numbers are unique within a specific class+section of a school
+        # (e.g. Roll #1 in Class 10-A and Roll #1 in Class 10-B are different students).
+        # Uniqueness is enforced in StudentProfileSerializer.validate() because MySQL
+        # does not support conditional UniqueConstraints (models.W036).
+        # Blank roll_numbers are always allowed (multiple students can omit it).
+
 
     def __str__(self):
         return f'{self.student_name} — {self.school.name}'

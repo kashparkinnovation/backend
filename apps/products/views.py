@@ -13,6 +13,7 @@ from .serializers import (
     ProductInventoryBulkSerializer,
 )
 from apps.users.permissions import IsVendor
+from apps.schools.models import SchoolApprovalStatus
 from rest_framework import permissions
 
 
@@ -29,7 +30,11 @@ class StorefrontProductListView(generics.ListAPIView):
     def get_queryset(self):
         qs = (
             Product.objects
-            .filter(is_active=True, vendor__is_approved=True)
+            .filter(
+                is_active=True,
+                vendor__is_approved=True,
+                school__approval_status=SchoolApprovalStatus.APPROVED,
+            )
             .select_related('vendor', 'school')
             .prefetch_related('inventory', 'images')
         )
@@ -45,7 +50,11 @@ class StorefrontProductDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.AllowAny]
     queryset = (
         Product.objects
-        .filter(is_active=True, vendor__is_approved=True)
+        .filter(
+            is_active=True,
+            vendor__is_approved=True,
+            school__approval_status=SchoolApprovalStatus.APPROVED,
+        )
         .select_related('vendor', 'school')
         .prefetch_related('inventory', 'images')
     )

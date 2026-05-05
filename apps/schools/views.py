@@ -159,7 +159,9 @@ class SchoolDashboardView(APIView):
         total_orders = Order.objects.filter(school=school).count()
         active_orders = Order.objects.filter(
             school=school
-        ).exclude(status__in=[OrderStatus.DELIVERED, OrderStatus.CANCELLED, OrderStatus.REFUNDED]).count()
+        ).exclude(
+            status__in=[OrderStatus.DELIVERED, OrderStatus.DISTRIBUTED, OrderStatus.CANCELLED, OrderStatus.REFUNDED]
+        ).count()
         
         delivered_count = Order.objects.filter(
             school=school, status=OrderStatus.DELIVERED

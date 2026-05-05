@@ -46,6 +46,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     can_manage_students = models.BooleanField(default=True)
     can_manage_content = models.BooleanField(default=True)
     can_manage_reports = models.BooleanField(default=True)
+    can_manage_orders = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

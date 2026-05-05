@@ -35,7 +35,12 @@ class StudentProfileListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.role == 'student':
-            return StudentProfile.objects.filter(parent=user).select_related('school')
+            return (
+                StudentProfile.objects
+                .filter(parent=user)
+                .select_related('school')
+                .prefetch_related('verification_requests')
+            )
         elif user.role == 'school':
             school = getattr(user, 'school_profile', None)
             if school:
@@ -68,11 +73,19 @@ class StudentProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.role == 'student':
-            return StudentProfile.objects.filter(parent=user)
+            return (
+                StudentProfile.objects
+                .filter(parent=user)
+                .prefetch_related('verification_requests')
+            )
         elif user.role == 'school':
             school = getattr(user, 'school_profile', None)
             if school:
-                return StudentProfile.objects.filter(school=school)
+                return (
+                    StudentProfile.objects
+                    .filter(school=school)
+                    .prefetch_related('verification_requests')
+                )
         return StudentProfile.objects.none()
 
 
@@ -85,7 +98,12 @@ class AdminStudentListView(generics.ListAPIView):
     filterset_fields = ['is_verified', 'school']
 
     def get_queryset(self):
-        return StudentProfile.objects.select_related('school', 'parent').order_by('-created_at')
+        return (
+            StudentProfile.objects
+            .select_related('school', 'parent')
+            .prefetch_related('verification_requests')
+            .order_by('-created_at')
+        )
 
 
 class AdminStudentSchoolUpdateView(APIView):
