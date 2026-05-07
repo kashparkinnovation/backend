@@ -212,6 +212,7 @@ class InventoryBulkCreateView(APIView):
         serializer.is_valid(raise_exception=True)
 
         results = []
+        kept_ids = []
         for variant in serializer.validated_data['variants']:
             size = variant.get('size', '').strip()
             color = variant.get('color', '').strip()
@@ -223,9 +224,17 @@ class InventoryBulkCreateView(APIView):
                 product=product,
                 size=size,
                 color=color,
-                defaults={'quantity': qty, 'price_override': price_override, 'school_commission_percent': school_commission_percent},
+                defaults={
+                    'quantity': qty,
+                    'price_override': price_override,
+                    'school_commission_percent': school_commission_percent
+                },
             )
+            kept_ids.append(obj.id)
             results.append(ProductInventorySerializer(obj).data)
+
+        # Delete variants not in the payload
+        ProductInventory.objects.filter(product=product).exclude(id__in=kept_ids).delete()
 
         return Response(results, status=status.HTTP_201_CREATED)
 
