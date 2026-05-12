@@ -31,12 +31,12 @@ class OrderListView(generics.ListAPIView):
     """GET /api/v1/orders/ — Vendor: all their orders; School: school orders; Student: own orders."""
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
-    filterset_fields  = ['status', 'distribution_status', 'school']
+    filterset_fields  = ['status', 'school']
 
     def get_queryset(self):
         user = self.request.user
         qs = Order.objects.select_related(
-            'student_profile', 'school', 'vendor', 'bulk_order'
+            'student_profile', 'student_profile__parent', 'school', 'vendor', 'bulk_order'
         ).prefetch_related('items')
 
         if user.role == 'vendor':
@@ -124,7 +124,9 @@ class OrderDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs   = Order.objects.select_related('student_profile', 'school', 'vendor').prefetch_related('items')
+        qs   = Order.objects.select_related('student_profile', 'student_profile__parent', 'school', 'vendor').prefetch_related('items')
+        if user.role == 'admin' or user.is_staff:
+            return qs
         if user.role == 'vendor':
             return qs.filter(vendor__user=user)
         elif user.role == 'school':

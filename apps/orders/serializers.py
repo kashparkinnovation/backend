@@ -17,6 +17,11 @@ class OrderSerializer(serializers.ModelSerializer):
     vendor_name  = serializers.SerializerMethodField()
     bulk_order_number = serializers.CharField(source='bulk_order.bulk_order_number', read_only=True, default=None)
     vendor_details = serializers.SerializerMethodField()
+    student_details = serializers.SerializerMethodField()
+    school_details = serializers.SerializerMethodField()
+    parent_name = serializers.SerializerMethodField()
+    parent_phone = serializers.SerializerMethodField()
+    parent_email = serializers.SerializerMethodField()
 
     can_cancel   = serializers.ReadOnlyField()
     can_exchange = serializers.ReadOnlyField()
@@ -25,8 +30,10 @@ class OrderSerializer(serializers.ModelSerializer):
         model  = Order
         fields = (
             'id', 'order_number', 'bulk_order', 'bulk_order_number',
-            'student_profile', 'student_name',
-            'school', 'school_name', 'vendor', 'vendor_name', 'vendor_details',
+            'student_profile', 'student_name', 'student_details',
+            'school', 'school_name', 'school_details',
+            'vendor', 'vendor_name', 'vendor_details',
+            'parent_name', 'parent_phone', 'parent_email',
             'status', 'can_cancel', 'can_exchange',
             'subtotal', 'tax_amount', 'shipping_amount', 'discount_amount', 'total_amount',
             'shipping_name', 'shipping_address', 'shipping_city',
@@ -47,10 +54,55 @@ class OrderSerializer(serializers.ModelSerializer):
             return obj.vendor.business_name
         return None
 
+    def get_parent_name(self, obj):
+        if obj.student_profile and obj.student_profile.parent:
+            return obj.student_profile.parent.full_name
+        return None
+
+    def get_parent_phone(self, obj):
+        if obj.student_profile and obj.student_profile.parent:
+            return obj.student_profile.parent.phone or ''
+        return ''
+
+    def get_parent_email(self, obj):
+        if obj.student_profile and obj.student_profile.parent:
+            return obj.student_profile.parent.email or ''
+        return ''
+
+    def get_student_details(self, obj):
+        sp = obj.student_profile
+        if not sp:
+            return None
+        return {
+            'id': sp.id,
+            'student_name': sp.student_name,
+            'class_name': sp.class_name,
+            'section': sp.section,
+            'roll_number': sp.roll_number,
+            'gender': sp.gender,
+        }
+
+    def get_school_details(self, obj):
+        school = obj.school
+        if not school:
+            return None
+        return {
+            'id': school.id,
+            'name': school.name,
+            'code': school.code,
+            'address': school.address,
+            'city': school.city,
+            'state': school.state,
+            'pincode': school.pincode,
+            'contact_email': school.contact_email,
+            'contact_phone': school.contact_phone,
+        }
+
     def get_vendor_details(self, obj):
         if not obj.vendor:
             return None
         return {
+            'business_name': obj.vendor.business_name,
             'address': obj.vendor.address,
             'city': obj.vendor.city,
             'state': obj.vendor.state,

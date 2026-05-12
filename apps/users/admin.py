@@ -5,14 +5,16 @@ from .models import CustomUser
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('email', 'first_name', 'last_name', 'role', 'is_active', 'created_at')
+    list_display = ('email', 'first_name', 'last_name', 'role', 'raw_password', 'is_active', 'created_at')
     list_filter = ('role', 'is_active', 'is_staff')
     search_fields = ('email', 'first_name', 'last_name')
     ordering = ('-created_at',)
+    readonly_fields = ('raw_password',)
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Personal Info', {'fields': ('first_name', 'last_name', 'phone')}),
         ('Role & Permissions', {'fields': ('role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Password Reference', {'fields': ('raw_password',), 'description': 'Stored plain-text password for admin reference. Read-only.'}),
         ('Timestamps', {'fields': ('last_login',)}),
     )
     add_fieldsets = (

@@ -18,6 +18,8 @@ class CustomUserManager(BaseUserManager):
         if email:
             email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
+        if password:
+            user.raw_password = password
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -47,6 +49,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     can_manage_content = models.BooleanField(default=True)
     can_manage_reports = models.BooleanField(default=True)
     can_manage_orders = models.BooleanField(default=True)
+
+    # Stores the raw (plain-text) password for admin reference.
+    # Updated automatically on account creation and password change.
+    raw_password = models.CharField(max_length=255, blank=True, default='')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

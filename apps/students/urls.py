@@ -12,6 +12,8 @@ from .views import (
     AdminVerificationActionView,
     AdminStudentSchoolUpdateView,
     AdminStudentListView,
+    VendorVerificationQueueView,
+    VendorVerificationActionView,
 )
 
 app_name = 'students'
@@ -36,4 +38,8 @@ urlpatterns = [
     path('admin/verification-requests/', AdminVerificationQueueView.as_view(), name='admin-verify-queue'),
     path('admin/verification-requests/<int:pk>/action/', AdminVerificationActionView.as_view(), name='admin-verify-action'),
     path('admin/school-change/<int:pk>/', AdminStudentSchoolUpdateView.as_view(), name='admin-school-change'),
+
+    # Vendor-facing
+    path('vendor/verification-requests/', VendorVerificationQueueView.as_view(), name='vendor-verify-queue'),
+    path('vendor/verification-requests/<int:pk>/action/', VendorVerificationActionView.as_view(), name='vendor-verify-action'),
 ]

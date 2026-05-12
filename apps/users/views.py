@@ -75,6 +75,7 @@ class ChangePasswordView(APIView):
         if not user.check_password(old_password):
             return Response({'detail': 'Old password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
         user.set_password(new_password)
+        user.raw_password = new_password
         user.save()
         return Response({'detail': 'Password changed successfully.'})
 
@@ -98,12 +99,14 @@ class AdminUserViewSet(viewsets.ModelViewSet):
         user = serializer.save(role=UserRole.ADMIN, is_staff=True)
         if 'password' in self.request.data:
             user.set_password(self.request.data['password'])
+            user.raw_password = self.request.data['password']
             user.save()
 
     def perform_update(self, serializer):
         user = serializer.save()
         if 'password' in self.request.data and self.request.data['password']:
             user.set_password(self.request.data['password'])
+            user.raw_password = self.request.data['password']
             user.save()
 
 from .models import ContactLead
@@ -194,6 +197,7 @@ class OTPForgotPasswordView(APIView):
         # Reset password
         password = serializer.validated_data['password']
         user.set_password(password)
+        user.raw_password = password
         user.save()
         
         return Response({'detail': 'Password reset successfully.'}, status=status.HTTP_200_OK)
@@ -234,7 +238,9 @@ class EmailOTPForgotPasswordView(APIView):
         serializer = EmailOTPForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
-        user.set_password(serializer.validated_data['password'])
+        new_password = serializer.validated_data['password']
+        user.set_password(new_password)
+        user.raw_password = new_password
         user.save()
         return Response({'detail': 'Password reset successfully.'}, status=status.HTTP_200_OK)
 

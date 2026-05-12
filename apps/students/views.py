@@ -371,3 +371,59 @@ class StudentCSVImportView(APIView):
             'skipped': skipped_count,
             'errors':  errors,
         }, status=status.HTTP_201_CREATED)
+
+
+# ─── Vendor Verification Views ───────────────────────────────────────────────
+
+from apps.users.permissions import IsVendor
+
+class VendorVerificationQueueView(generics.ListAPIView):
+    """GET /api/v1/students/vendor/verification-requests/ — Vendor sees requests for their attached schools."""
+    serializer_class = VerificationRequestSerializer
+    permission_classes = [IsVendor]
+    filterset_fields = ['status']
+
+    def get_queryset(self):
+        vendor = getattr(self.request.user, 'vendor_profile', None)
+        if not vendor:
+            return VerificationRequest.objects.none()
+        return (
+            VerificationRequest.objects
+            .filter(student__school__vendor=vendor)
+            .select_related('student', 'student__school', 'student__parent', 'reviewed_by')
+            .order_by('-created_at')
+        )
+
+
+class VendorVerificationActionView(APIView):
+    """PATCH /api/v1/students/vendor/verification-requests/{id}/action/ — Vendor approves or rejects."""
+    permission_classes = [IsVendor]
+
+    def patch(self, request, pk):
+        vendor = getattr(request.user, 'vendor_profile', None)
+        if not vendor:
+            return Response({'detail': 'No vendor profile found.'}, status=403)
+
+        # Only allow action on students in vendor's schools
+        vr = get_object_or_404(VerificationRequest, pk=pk, student__school__vendor=vendor)
+
+        serializer = VerificationRequestActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        action      = serializer.validated_data['action']
+        review_note = serializer.validated_data.get('review_note', '')
+
+        vr.status      = VerificationStatus.APPROVED if action == 'approve' else VerificationStatus.REJECTED
+        vr.review_note = review_note
+        vr.reviewed_by = request.user
+        vr.reviewed_at = timezone.now()
+        vr.save()
+
+        # If approved, also mark the student as verified
+        if action == 'approve':
+            vr.student.is_verified = True
+            vr.student.verified_at = timezone.now()
+            vr.student.save(update_fields=['is_verified', 'verified_at'])
+
+        return Response(VerificationRequestSerializer(vr).data)
+
